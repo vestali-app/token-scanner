@@ -96,6 +96,25 @@
   .stat b { display:block; font-family:'JetBrains Mono', monospace; font-size:13px; font-weight:600; }
   .stat span { font-size:10px; color:var(--faint); text-transform:uppercase; letter-spacing:.05em; }
 
+  /* ---------- price chart ---------- */
+  .chart-block { padding:14px 16px 4px; border-bottom:1px solid var(--border); }
+  .chart-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .chart-label { font-family:'Chakra Petch', sans-serif; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+  .chart-pct { font-family:'JetBrains Mono', monospace; font-size:12px; font-weight:600; margin-left:8px; }
+  .pct-up { color:var(--pass); } .pct-down { color:var(--reject); }
+  .tf-row { display:flex; gap:4px; }
+  .tf {
+    border:none; background:var(--surface2); color:var(--muted); border-radius:6px;
+    font-family:'Chakra Petch', sans-serif; font-size:10px; font-weight:700; letter-spacing:.04em;
+    padding:6px 8px; cursor:pointer;
+  }
+  .tf.active { background:var(--text); color:var(--bg); }
+  .tf:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+  .chart-wrap { position:relative; background:var(--surface2); border-radius:10px; height:130px; overflow:hidden; }
+  .chart-wrap canvas { display:block; width:100%; height:100%; }
+  .chart-msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--faint); text-align:center; padding:0 20px; }
+  .chart-times { display:flex; justify-content:space-between; font-family:'JetBrains Mono', monospace; font-size:10px; color:var(--faint); padding:6px 2px 8px; }
+
   .findings { padding:14px 16px 16px; }
   .f-group { margin-bottom:12px; }
   .f-title { font-family:'Chakra Petch', sans-serif; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
@@ -206,12 +225,13 @@ async function getJSON(url, timeoutMs = 15000) {
 ============================================================ */
 function newReport() {
   return {
-    hardFails: [], warnings: [], passes: [], score: 100, meta: {},
+    hardFails: [], warnings: [], passes: [], score: 100, meta: {}, securityChecked: false,
     fail(n, d)    { this.hardFails.push([n, d]); },
     warn(n, d, p) { this.warnings.push([n, d, p]); this.score -= p; },
     ok(n, d)      { this.passes.push([n, d || '']); },
     verdict() {
       if (this.hardFails.length) return 'REJECT';
+      if (!this.securityChecked) return 'UNVERIFIED';
       const s = Math.max(0, this.score);
       if (s >= 75) return 'PASS';
       if (s >= 50) return 'CAUTION';
@@ -219,7 +239,9 @@ function newReport() {
     },
     vclass() {
       const v = this.verdict();
-      return v === 'REJECT' ? 'reject' : (v === 'PASS' ? 'pass' : 'caution');
+      if (v === 'REJECT') return 'reject';
+      if (v === 'PASS') return 'pass';
+      return 'caution';
     }
   };
 }
@@ -238,7 +260,7 @@ function checkMarket(rep, pair) {
   Object.assign(rep.meta, {
     name: pair.baseToken?.name, symbol: pair.baseToken?.symbol,
     chain: pair.chainId, dex: pair.dexId, price: pair.priceUsd,
-    liq, vol, mcap, url: pair.url
+    liq, vol, mcap, url: pair.url, pairAddress: pair.pairAddress
   });
 
   if (liq < 10000) rep.warn('Liquidity', `only ${usd(liq)} — exit slippage will be brutal`, 20);
@@ -279,7 +301,8 @@ function checkMarket(rep, pair) {
 }
 
 function checkRugcheck(rep, rc) {
-  if (!rc) { rep.warn('RugCheck', 'no data — could not verify Solana security', 10); return; }
+  if (!rc) { rep.warn('SECURITY UNVERIFIED', 'RugCheck returned no data — mint/freeze authority, LP lock and holders are all unknown. Treat as unscanned.', 25); return; }
+  rep.securityChecked = true;
   const t = rc.token || {};
 
   if (t.mintAuthority) rep.fail('Mint authority ACTIVE', 'dev can print unlimited supply and dump');
@@ -321,8 +344,9 @@ function checkRugcheck(rep, rc) {
 }
 
 function checkGoPlus(rep, gp, hp) {
-  if (!gp) rep.warn('GoPlus', 'no data — could not verify contract security', 10);
+  if (!gp) rep.warn('SECURITY UNVERIFIED', 'GoPlus has no data for this chain/contract — honeypot status, taxes, mint and LP lock are all unknown. Treat as unscanned.', 25);
   else {
+    rep.securityChecked = true;
     const f = k => String(gp[k] ?? '0') === '1';
 
     if (f('is_honeypot')) rep.fail('HONEYPOT', 'GoPlus flags this — you cannot sell');
@@ -471,7 +495,11 @@ async function scan(address) {
 function renderResult(rep, address) {
   const v = rep.verdict(), vc = rep.vclass(), m = rep.meta;
   const score = Math.max(0, Math.round(rep.score));
+  const unverified = (v === 'UNVERIFIED');
   const segs = rep.hardFails.length ? 0 : Math.round(score / 10);
+  const scoreLabel = rep.hardFails.length ? 'hard fail — score not applicable'
+    : unverified ? 'contract security data unavailable — market data only'
+    : 'score ' + score + '/100';
 
   const item = (cls, arr, withPts) => arr.map(x => `
     <div class="f-item"><div class="dot ${cls}"></div>
@@ -489,17 +517,30 @@ function renderResult(rep, address) {
         <div class="tk-sub">${esc(m.chain || '?')} · ${esc(m.dex || '?')}</div>
         <div class="tk-addr">${esc(address)}</div>
       </div>
-      <div class="stamp v-${vc}">${v}${rep.hardFails.length ? '' : `<div style="font-size:10px;letter-spacing:.05em">${score}/100</div>`}</div>
+      <div class="stamp v-${vc}">${v}${(rep.hardFails.length || unverified) ? '' : `<div style="font-size:10px;letter-spacing:.05em">${score}/100</div>`}</div>
     </div>
     <div class="segbar" aria-label="risk score ${score} out of 100">
       ${Array.from({length:10}, (_,i) => `<div class="seg ${i < segs ? 'on-' + vc : ''}"></div>`).join('')}
     </div>
-    <div class="score-label">${rep.hardFails.length ? 'hard fail — score not applicable' : 'score ' + score + '/100'}</div>
+    <div class="score-label">${scoreLabel}</div>
     <div class="stats">
       <div class="stat"><b>${m.price ? '$' + (+m.price < 0.01 ? (+m.price).toExponential(2) : (+m.price).toFixed(4)) : 'n/a'}</b><span>price</span></div>
       <div class="stat"><b>${usd(m.liq)}</b><span>liquidity</span></div>
       <div class="stat"><b>${usd(m.mcap)}</b><span>mcap</span></div>
       <div class="stat"><b>${usd(m.vol)}</b><span>vol 24h</span></div>
+    </div>
+    <div class="chart-block">
+      <div class="chart-head">
+        <div><span class="chart-label">Price</span><span class="chart-pct" id="chartPct"></span></div>
+        <div class="tf-row" id="tfRow">
+          ${['15M','1H','4H','24H','7D','30D'].map(t => `<button class="tf${t==='24H'?' active':''}" data-tf="${t}">${t}</button>`).join('')}
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+        <div class="chart-msg" id="chartMsg">loading…</div>
+      </div>
+      <div class="chart-times"><span id="tStart"></span><span id="tEnd"></span></div>
     </div>
     <div class="findings">
       ${rep.hardFails.length ? `<div class="f-group"><div class="f-title reject">Hard fails — do not touch</div>${item('reject', rep.hardFails)}</div>` : ''}
@@ -511,7 +552,126 @@ function renderResult(rep, address) {
     </div>
     <div class="disclaimer">PASS means "no obvious scam vectors detected", not "safe" and never "buy". Insider dumps with clean contracts are only partially detectable. Not financial advice.</div>
   </div>`;
+  currentMeta = rep.meta;
+  initChart();
   window.scrollTo({ top: 0 });
+}
+let currentMeta = null;
+
+/* ============================================================
+   Price chart (GeckoTerminal OHLCV, free, no key)
+============================================================ */
+const GT_NETWORKS = { solana:'solana', ethereum:'eth', bsc:'bsc', base:'base',
+  arbitrum:'arbitrum', polygon:'polygon_pos', avalanche:'avax', optimism:'optimism', fantom:'ftm' };
+const TF_CONFIG = {
+  '15M': { path:'minute', agg:1,  limit:15  },
+  '1H' : { path:'minute', agg:1,  limit:60  },
+  '4H' : { path:'minute', agg:5,  limit:48  },
+  '24H': { path:'minute', agg:15, limit:96  },
+  '7D' : { path:'hour',   agg:1,  limit:168 },
+  '30D': { path:'day',    agg:1,  limit:30  },
+};
+let chartCache = {};
+
+async function loadChart(tf) {
+  const m = currentMeta;
+  const msg = $('chartMsg'), pctEl = $('chartPct');
+  if (!m || !m.pairAddress) { msg.textContent = 'chart unavailable — no pair address'; return; }
+  const net = GT_NETWORKS[m.chain] || m.chain;
+  const cfg = TF_CONFIG[tf];
+  msg.textContent = 'loading…'; msg.style.display = 'flex'; pctEl.textContent = '';
+
+  let rows = chartCache[tf];
+  if (!rows) {
+    try {
+      const url = `https://api.geckoterminal.com/api/v2/networks/${net}/pools/${m.pairAddress}/ohlcv/${cfg.path}?aggregate=${cfg.agg}&limit=${cfg.limit}`;
+      const j = await getJSON(url);
+      rows = (j?.data?.attributes?.ohlcv_list || []).slice().sort((a,b) => a[0] - b[0]);
+      if (rows.length < 2) throw new Error('no candles');
+      chartCache[tf] = rows;
+    } catch (e) {
+      msg.textContent = 'chart unavailable for this chain/pair (GeckoTerminal has no data)';
+      $('tStart').textContent = ''; $('tEnd').textContent = '';
+      return;
+    }
+  }
+  msg.style.display = 'none';
+  drawChart(rows, tf);
+}
+
+function drawChart(rows, tf) {
+  const canvas = $('priceChart');
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const closes = rows.map(r => +r[4]);
+  const times = rows.map(r => r[0] * 1000);
+  const min = Math.min(...closes), max = Math.max(...closes);
+  const pad = (max - min) * 0.12 || max * 0.05 || 1;
+  const lo = min - pad, hi = max + pad;
+  const PX = 8, PY = 10;
+  const x = i => PX + (W - 2*PX) * (i / (closes.length - 1));
+  const y = v => H - PY - (H - 2*PY) * ((v - lo) / (hi - lo));
+
+  const up = closes[closes.length-1] >= closes[0];
+  const col = up ? '#56D68B' : '#FF5C5C';
+
+  // gridlines
+  ctx.strokeStyle = '#242D38'; ctx.lineWidth = 0.6;
+  for (const f of [0.25, 0.5, 0.75]) {
+    ctx.beginPath(); ctx.moveTo(PX, PY + (H-2*PY)*f); ctx.lineTo(W-PX, PY + (H-2*PY)*f); ctx.stroke();
+  }
+
+  // fill
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, col + '2E'); grad.addColorStop(1, col + '00');
+  ctx.beginPath(); ctx.moveTo(x(0), y(closes[0]));
+  closes.forEach((c, i) => ctx.lineTo(x(i), y(c)));
+  ctx.lineTo(x(closes.length-1), H); ctx.lineTo(x(0), H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // line
+  ctx.beginPath(); ctx.moveTo(x(0), y(closes[0]));
+  closes.forEach((c, i) => ctx.lineTo(x(i), y(c)));
+  ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
+
+  // last-price dot
+  const lx = x(closes.length-1), ly = y(closes[closes.length-1]);
+  ctx.beginPath(); ctx.arc(lx, ly, 3.5, 0, Math.PI*2); ctx.fillStyle = col; ctx.fill();
+  ctx.beginPath(); ctx.arc(lx, ly, 1.6, 0, Math.PI*2); ctx.fillStyle = '#0D1014'; ctx.fill();
+
+  // % change
+  const pct = (closes[closes.length-1] - closes[0]) / closes[0] * 100;
+  const pctEl = $('chartPct');
+  pctEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+  pctEl.className = 'chart-pct ' + (pct >= 0 ? 'pct-up' : 'pct-down');
+
+  // time labels
+  const fmt = t => {
+    const d = new Date(t);
+    return (tf === '7D' || tf === '30D')
+      ? d.toLocaleDateString(undefined, { day:'numeric', month:'short' })
+      : d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+  };
+  $('tStart').textContent = fmt(times[0]);
+  $('tEnd').textContent = 'now';
+}
+
+function initChart() {
+  chartCache = {};
+  const row = $('tfRow');
+  if (!row) return;
+  row.querySelectorAll('.tf').forEach(btn => btn.addEventListener('click', () => {
+    row.querySelectorAll('.tf').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadChart(btn.dataset.tf);
+  }));
+  loadChart('24H');
 }
 
 /* ============================================================
