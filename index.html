@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0D1014">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Token Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D1014;
+    --surface: #151A21;
+    --surface2: #1B222B;
+    --border: #242D38;
+    --text: #E8EDF2;
+    --muted: #7A8794;
+    --faint: #4A5560;
+    --reject: #FF5C5C;
+    --caution: #FFB347;
+    --pass: #56D68B;
+    --radius: 14px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: max(16px, env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation:none!important; transition:none!important; } }
+
+  /* ---------- header ---------- */
+  header { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:20px; }
+  .brand { font-family:'Chakra Petch', sans-serif; font-weight:700; font-size:20px; letter-spacing:.12em; text-transform:uppercase; }
+  .brand span { color: var(--faint); }
+  .tagline { font-size:11px; color:var(--faint); letter-spacing:.06em; text-transform:uppercase; }
+
+  /* ---------- input ---------- */
+  .scan-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:20px; }
+  .input-row { display:flex; gap:8px; }
+  input[type=text] {
+    flex:1; min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:'JetBrains Mono', monospace; font-size:13px; padding:12px;
+    outline:none;
+  }
+  input[type=text]:focus { border-color:var(--muted); }
+  input[type=text]::placeholder { color:var(--faint); }
+  .btn {
+    border:none; border-radius:10px; font-family:'Chakra Petch', sans-serif; font-weight:600;
+    font-size:14px; letter-spacing:.08em; text-transform:uppercase; cursor:pointer;
+    padding:12px 18px; color:var(--bg); background:var(--text);
+  }
+  .btn:active { opacity:.75; }
+  .btn:disabled { background:var(--faint); cursor:wait; }
+  .btn:focus-visible, input:focus-visible { outline:2px solid var(--text); outline-offset:2px; }
+  .btn-ghost { background:var(--surface2); color:var(--muted); padding:12px 14px; }
+  .hint { font-size:12px; color:var(--faint); margin-top:10px; }
+
+  /* ---------- status ---------- */
+  .status { font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--muted); margin:16px 4px; white-space:pre-line; }
+
+  /* ---------- result card ---------- */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:20px; animation:rise .25s ease-out; }
+  @keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+  .card-head { padding:16px 16px 0; display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .tk-name { font-weight:600; font-size:17px; }
+  .tk-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+  .tk-addr { font-family:'JetBrains Mono', monospace; font-size:10px; color:var(--faint); word-break:break-all; margin-top:6px; }
+
+  .stamp {
+    font-family:'Chakra Petch', sans-serif; font-weight:700; text-transform:uppercase;
+    font-size:15px; letter-spacing:.1em; padding:8px 12px; border-radius:8px;
+    border:2px solid; transform:rotate(2deg); flex-shrink:0; text-align:center;
+  }
+  .v-reject  { color:var(--reject);  border-color:var(--reject);  background:rgba(255,92,92,.08); }
+  .v-caution { color:var(--caution); border-color:var(--caution); background:rgba(255,179,71,.08); }
+  .v-pass    { color:var(--pass);    border-color:var(--pass);    background:rgba(86,214,139,.08); }
+
+  .segbar { display:flex; gap:4px; padding:16px 16px 4px; }
+  .seg { flex:1; height:8px; border-radius:3px; background:var(--surface2); }
+  .seg.on-pass { background:var(--pass); } .seg.on-caution { background:var(--caution); } .seg.on-reject { background:var(--reject); }
+  .score-label { font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--muted); padding:0 16px 8px; }
+
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-top:8px; }
+  .stat { background:var(--surface); padding:10px 8px; text-align:center; }
+  .stat b { display:block; font-family:'JetBrains Mono', monospace; font-size:13px; font-weight:600; }
+  .stat span { font-size:10px; color:var(--faint); text-transform:uppercase; letter-spacing:.05em; }
+
+  .findings { padding:14px 16px 16px; }
+  .f-group { margin-bottom:12px; }
+  .f-title { font-family:'Chakra Petch', sans-serif; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px; }
+  .f-title.reject { color:var(--reject); } .f-title.caution { color:var(--caution); } .f-title.pass { color:var(--pass); }
+  .f-item { display:flex; gap:10px; padding:8px 10px; border-radius:8px; background:var(--surface2); margin-bottom:6px; font-size:13px; }
+  .f-item .dot { width:8px; height:8px; border-radius:50%; margin-top:6px; flex-shrink:0; }
+  .dot.reject { background:var(--reject); } .dot.caution { background:var(--caution); } .dot.pass { background:var(--pass); }
+  .f-item b { font-weight:600; }
+  .f-item small { display:block; color:var(--muted); font-size:12px; }
+  details summary { cursor:pointer; list-style:none; }
+  details summary::-webkit-details-marker { display:none; }
+  details summary .f-title::after { content:' +'; color:var(--faint); }
+  details[open] summary .f-title::after { content:' –'; }
+
+  .card-foot { padding:0 16px 16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .link { color:var(--muted); font-size:13px; text-decoration:none; border-bottom:1px solid var(--border); }
+  .disclaimer { font-size:11px; color:var(--faint); padding:12px 16px; border-top:1px solid var(--border); }
+
+  /* ---------- history ---------- */
+  .h-head { display:flex; justify-content:space-between; align-items:baseline; margin:24px 4px 10px; }
+  .h-title { font-family:'Chakra Petch', sans-serif; font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .h-clear { background:none; border:none; color:var(--faint); font-size:12px; cursor:pointer; }
+  .h-item {
+    width:100%; text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; margin-bottom:8px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px;
+    color:var(--text); font-family:inherit; font-size:14px;
+  }
+  .h-item:active { background:var(--surface2); }
+  .h-meta { min-width:0; }
+  .h-sym { font-weight:600; }
+  .h-time { font-size:11px; color:var(--faint); }
+  .chip { font-family:'Chakra Petch', sans-serif; font-size:10px; font-weight:700; letter-spacing:.08em; padding:4px 8px; border-radius:6px; border:1px solid; flex-shrink:0; }
+  .empty { text-align:center; color:var(--faint); font-size:13px; padding:24px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">TOKEN<span>/</span>SCAN</div>
+  <div class="tagline">scam filter · not advice</div>
+</header>
+
+<div class="scan-box">
+  <div class="input-row">
+    <input type="text" id="addr" placeholder="Paste contract address (SOL / EVM)" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+    <button class="btn btn-ghost" id="pasteBtn" aria-label="Paste from clipboard">Paste</button>
+  </div>
+  <div class="input-row" style="margin-top:8px">
+    <button class="btn" id="scanBtn" style="flex:1">Scan token</button>
+  </div>
+  <div class="hint">REJECT is reliable. PASS only means "no obvious scam vectors" — it is never a buy signal.</div>
+</div>
+
+<div class="status" id="status"></div>
+<div id="result"></div>
+
+<div class="h-head">
+  <div class="h-title">Scan history</div>
+  <button class="h-clear" id="clearBtn">clear</button>
+</div>
+<div id="history"></div>
+
+<script>
+/* ============================================================
+   Storage (localStorage with in-memory fallback)
+============================================================ */
+const store = (() => {
+  let mem = {};
+  const ok = (() => { try { localStorage.setItem('_t','1'); localStorage.removeItem('_t'); return true; } catch { return false; } })();
+  return {
+    get k() { return ok ? JSON.parse(localStorage.getItem('scans') || '[]') : (mem.scans || []); },
+    set k(v) { if (ok) localStorage.setItem('scans', JSON.stringify(v)); else mem.scans = v; }
+  };
+})();
+
+/* ============================================================
+   Helpers
+============================================================ */
+const $ = id => document.getElementById(id);
+const EVM_CHAIN_IDS = { ethereum:'1', bsc:'56', polygon:'137', arbitrum:'42161', base:'8453', avalanche:'43114', optimism:'10', fantom:'250' };
+
+function chainType(a) {
+  if (/^0x[a-fA-F0-9]{40}$/.test(a)) return 'evm';
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) return 'solana';
+  return 'unknown';
+}
+function usd(v) {
+  if (v == null || isNaN(v)) return 'n/a';
+  v = +v;
+  if (v >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
+  return '$' + v.toFixed(2);
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+async function getJSON(url, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+
+/* ============================================================
+   Report object
+============================================================ */
+function newReport() {
+  return {
+    hardFails: [], warnings: [], passes: [], score: 100, meta: {},
+    fail(n, d)    { this.hardFails.push([n, d]); },
+    warn(n, d, p) { this.warnings.push([n, d, p]); this.score -= p; },
+    ok(n, d)      { this.passes.push([n, d || '']); },
+    verdict() {
+      if (this.hardFails.length) return 'REJECT';
+      const s = Math.max(0, this.score);
+      if (s >= 75) return 'PASS';
+      if (s >= 50) return 'CAUTION';
+      return 'HIGH RISK';
+    },
+    vclass() {
+      const v = this.verdict();
+      return v === 'REJECT' ? 'reject' : (v === 'PASS' ? 'pass' : 'caution');
+    }
+  };
+}
+
+/* ============================================================
+   Checks — mirrors token_validator.py
+============================================================ */
+function checkMarket(rep, pair) {
+  const liq = +(pair.liquidity?.usd || 0);
+  const vol = +(pair.volume?.h24 || 0);
+  const mcap = pair.marketCap || pair.fdv;
+  const tx = pair.txns?.h24 || {};
+  const buys = +(tx.buys || 0), sells = +(tx.sells || 0);
+  const chg = pair.priceChange?.h24;
+
+  Object.assign(rep.meta, {
+    name: pair.baseToken?.name, symbol: pair.baseToken?.symbol,
+    chain: pair.chainId, dex: pair.dexId, price: pair.priceUsd,
+    liq, vol, mcap, url: pair.url
+  });
+
+  if (liq < 10000) rep.warn('Liquidity', `only ${usd(liq)} — exit slippage will be brutal`, 20);
+  else if (liq < 50000) rep.warn('Liquidity', `${usd(liq)} — thin, small size only`, 8);
+  else rep.ok('Liquidity', usd(liq));
+
+  if (mcap > 0 && liq > 0) {
+    const r = liq / mcap * 100;
+    if (r < 2) rep.warn('Liq/MCap ratio', `${r.toFixed(1)}% — market cap is mostly air`, 8);
+    else rep.ok('Liq/MCap ratio', r.toFixed(1) + '%');
+  }
+
+  if (pair.pairCreatedAt) {
+    const ageH = (Date.now() - pair.pairCreatedAt) / 3.6e6;
+    rep.meta.ageH = ageH;
+    if (ageH < 24) rep.warn('Token age', `${ageH.toFixed(0)}h old — launch-window rug risk is highest`, 12);
+    else if (ageH < 168) rep.warn('Token age', `${(ageH/24).toFixed(1)} days old — still very young`, 5);
+    else rep.ok('Token age', (ageH/24).toFixed(0) + ' days');
+  }
+
+  if (liq > 0 && vol / Math.max(liq,1) > 15) rep.warn('Volume pattern', `24h vol ${usd(vol)} vs ${usd(liq)} liq — possible wash trading`, 8);
+  else if (vol < 1000) rep.warn('Volume pattern', `24h volume ${usd(vol)} — market is dead`, 8);
+  else rep.ok('Volume 24h', usd(vol));
+
+  const total = buys + sells;
+  if (total > 20) {
+    if (sells === 0) rep.warn('Trade flow', `${buys} buys, 0 sells — classic honeypot signature`, 15);
+    else if (buys / Math.max(sells,1) > 10) rep.warn('Trade flow', `${buys} buys vs ${sells} sells — possible sell restriction`, 8);
+    else rep.ok('Trade flow', `${buys} buys / ${sells} sells (24h)`);
+  }
+
+  if (chg != null && +chg <= -85) rep.warn('Price action', `${chg}% in 24h — looks already rugged/dumped`, 15);
+
+  const info = pair.info || {};
+  const socials = info.socials || [], sites = info.websites || [];
+  if (!socials.length && !sites.length) rep.warn('Socials', 'no website or social links on profile', 5);
+  else rep.ok('Socials', socials.map(s => s.type).concat(sites.length ? ['website'] : []).join(', '));
+}
+
+function checkRugcheck(rep, rc) {
+  if (!rc) { rep.warn('RugCheck', 'no data — could not verify Solana security', 10); return; }
+  const t = rc.token || {};
+
+  if (t.mintAuthority) rep.fail('Mint authority ACTIVE', 'dev can print unlimited supply and dump');
+  else rep.ok('Mint authority', 'revoked');
+
+  if (t.freezeAuthority) rep.fail('Freeze authority ACTIVE', 'dev can freeze your tokens so you cannot sell');
+  else rep.ok('Freeze authority', 'revoked');
+
+  const lps = (rc.markets || []).map(m => +(m.lp?.lpLockedPct)).filter(v => !isNaN(v));
+  if (lps.length) {
+    const best = Math.max(...lps);
+    if (best < 50) rep.fail('LP unlocked', `only ${best.toFixed(0)}% of LP locked/burned — liquidity can be pulled`);
+    else if (best < 90) rep.warn('LP lock', `${best.toFixed(0)}% locked — partial pull possible`, 10);
+    else rep.ok('LP lock', `${best.toFixed(0)}% locked/burned`);
+  }
+
+  const holders = rc.topHolders || [];
+  const top10 = holders.slice(0,10).reduce((s,h) => s + (+h.pct || 0), 0);
+  if (top10) {
+    rep.meta.top10 = top10;
+    if (top10 > 40) rep.warn('Holder concentration', `top 10 wallets hold ${top10.toFixed(0)}% — coordinated dump risk`, 15);
+    else if (top10 > 25) rep.warn('Holder concentration', `top 10 hold ${top10.toFixed(0)}%`, 8);
+    else rep.ok('Holder concentration', `top 10 hold ${top10.toFixed(0)}%`);
+  }
+
+  const insiders = holders.filter(h => h.insider);
+  if (insiders.length) {
+    const ip = insiders.reduce((s,h) => s + (+h.pct || 0), 0);
+    if (ip > 10) rep.warn('Insider supply', `flagged insider wallets hold ${ip.toFixed(0)}% — bundle dump risk`, 15);
+    else rep.warn('Insider supply', `insider wallets hold ${ip.toFixed(1)}%`, 5);
+  }
+
+  for (const risk of rc.risks || []) {
+    const lvl = (risk.level || '').toLowerCase();
+    const dup = rep.hardFails.some(f => f[0].includes(risk.name));
+    if (lvl === 'danger' && !dup) rep.warn('RugCheck: ' + risk.name, risk.description || '', 10);
+    else if (lvl === 'warn') rep.warn('RugCheck: ' + risk.name, risk.description || '', 4);
+  }
+}
+
+function checkGoPlus(rep, gp, hp) {
+  if (!gp) rep.warn('GoPlus', 'no data — could not verify contract security', 10);
+  else {
+    const f = k => String(gp[k] ?? '0') === '1';
+
+    if (f('is_honeypot')) rep.fail('HONEYPOT', 'GoPlus flags this — you cannot sell');
+    if (f('cannot_sell_all')) rep.fail('Sell restriction', 'holders cannot sell full balance');
+    if (f('transfer_pausable')) rep.fail('Transfers pausable', 'dev can pause all transfers');
+
+    const bt = (+gp.buy_tax || 0) * 100, st = (+gp.sell_tax || 0) * 100;
+    if (bt > 10 || st > 10) rep.fail('Excessive tax', `buy ${bt.toFixed(0)}% / sell ${st.toFixed(0)}%`);
+    else if (bt > 5 || st > 5) rep.warn('Tax', `buy ${bt.toFixed(0)}% / sell ${st.toFixed(0)}%`, 5);
+    else rep.ok('Taxes', `buy ${bt.toFixed(0)}% / sell ${st.toFixed(0)}%`);
+
+    if (f('is_mintable')) rep.fail('Mintable', 'owner can mint new supply');
+    else rep.ok('Mint', 'not mintable');
+
+    const owner = gp.owner_address || '';
+    const renounced = ['','0x0000000000000000000000000000000000000000','0x000000000000000000000000000000000000dead'].includes(owner);
+    if (f('is_proxy')) rep.fail('Upgradeable proxy', 'contract logic can be swapped after you buy');
+    if (!renounced && f('owner_change_balance')) rep.fail('Owner can edit balances', 'owner can modify holder balances');
+    if (!renounced) rep.warn('Ownership', 'not renounced — owner retains control', 6);
+    else rep.ok('Ownership', 'renounced');
+
+    if (f('is_blacklisted')) rep.warn('Blacklist function', 'wallets can be blacklisted from selling', 8);
+    if (f('slippage_modifiable')) rep.warn('Modifiable tax', 'owner can change taxes after launch', 8);
+    if (!f('is_open_source')) rep.warn('Unverified contract', 'source not verified — can hide anything', 12);
+    else rep.ok('Contract source', 'verified');
+
+    const lph = gp.lp_holders || [];
+    if (lph.length) {
+      const locked = lph.reduce((s,h) => s + ((String(h.is_locked) === '1' || (h.address||'').endsWith('dead')) ? (+h.percent || 0) : 0), 0) * 100;
+      if (locked < 50) rep.fail('LP unlocked', `only ${locked.toFixed(0)}% of LP locked/burned`);
+      else if (locked < 90) rep.warn('LP lock', `${locked.toFixed(0)}% locked`, 10);
+      else rep.ok('LP lock', `${locked.toFixed(0)}% locked/burned`);
+    }
+
+    const hs = gp.holders || [];
+    const top10 = hs.slice(0,10).reduce((s,h) => s + (String(h.is_contract) !== '1' ? (+h.percent || 0) : 0), 0) * 100;
+    if (top10) {
+      rep.meta.top10 = top10;
+      if (top10 > 40) rep.warn('Holder concentration', `top 10 wallets hold ${top10.toFixed(0)}%`, 15);
+      else if (top10 > 25) rep.warn('Holder concentration', `top 10 hold ${top10.toFixed(0)}%`, 8);
+      else rep.ok('Holder concentration', `top 10 hold ${top10.toFixed(0)}%`);
+    }
+
+    const cp = (+gp.creator_percent || 0) * 100;
+    if (cp > 5) rep.warn('Deployer holdings', `deployer holds ${cp.toFixed(1)}% of supply`, 8);
+  }
+
+  if (hp) {
+    const r = hp.honeypotResult || {};
+    if (r.isHoneypot) rep.fail('HONEYPOT (simulated)', r.honeypotReason || 'sell simulation failed');
+    else rep.ok('Sell simulation', 'passed on honeypot.is');
+  }
+}
+
+/* ============================================================
+   Scan orchestration
+============================================================ */
+let busy = false;
+async function scan(address) {
+  if (busy) return;
+  address = address.trim();
+  const ct = chainType(address);
+  const status = $('status');
+  if (ct === 'unknown') { status.textContent = 'That does not look like a Solana mint or EVM contract address.'; return; }
+
+  busy = true; $('scanBtn').disabled = true;
+  $('result').innerHTML = '';
+  status.textContent = '› fetching market data (Dexscreener)…';
+
+  const rep = newReport();
+  const apiIssues = [];
+
+  try {
+    let ds = null, dsError = null;
+    try { ds = await getJSON('https://api.dexscreener.com/latest/dex/tokens/' + address); }
+    catch (e) { dsError = e; }
+
+    let pairs = (ds?.pairs || []).sort((a,b) => (+(b.liquidity?.usd||0)) - (+(a.liquidity?.usd||0)));
+
+    // fallback: search endpoint (different path, sometimes finds what /tokens misses)
+    if (!pairs.length) {
+      status.textContent = '› primary lookup empty, trying search endpoint…';
+      try {
+        const ds2 = await getJSON('https://api.dexscreener.com/latest/dex/search?q=' + address);
+        pairs = (ds2?.pairs || [])
+          .filter(p => (p.baseToken?.address || '').toLowerCase() === address.toLowerCase())
+          .sort((a,b) => (+(b.liquidity?.usd||0)) - (+(a.liquidity?.usd||0)));
+        dsError = null;
+      } catch (e) { if (!dsError) dsError = e; }
+    }
+
+    if (!pairs.length) {
+      if (dsError) {
+        status.textContent = 'Could not reach the Dexscreener API (' + dsError.message + ').\n\n'
+          + 'If you are viewing this inside the Claude app preview, external APIs are blocked there. '
+          + 'Open this file in Safari/Chrome, or deploy it to Vercel and open that URL instead.';
+      } else {
+        status.textContent = 'Dexscreener responded but has no trading pairs for this address. '
+          + 'Either the token is not listed yet (extreme risk) or the address is wrong.';
+      }
+      busy = false; $('scanBtn').disabled = false; return;
+    }
+    const pair = pairs[0];
+    checkMarket(rep, pair);
+
+    if (ct === 'solana') {
+      status.textContent = '› checking Solana security (RugCheck)…';
+      let rc = null;
+      try { rc = await getJSON('https://api.rugcheck.xyz/v1/tokens/' + address + '/report'); }
+      catch (e) { apiIssues.push('RugCheck unreachable'); }
+      checkRugcheck(rep, rc);
+    } else {
+      const dexChain = pair.chainId || '';
+      const cid = EVM_CHAIN_IDS[dexChain];
+      status.textContent = '› checking contract security (GoPlus)…';
+      let gp = null, hp = null;
+      if (cid) {
+        try {
+          const g = await getJSON(`https://api.gopluslabs.io/api/v1/token_security/${cid}?contract_addresses=${address.toLowerCase()}`);
+          gp = g?.result?.[address.toLowerCase()] || null;
+        } catch (e) { apiIssues.push('GoPlus unreachable'); }
+      }
+      if (['ethereum','bsc','base'].includes(dexChain)) {
+        status.textContent = '› running sell simulation (honeypot.is)…';
+        try { hp = await getJSON('https://api.honeypot.is/v2/IsHoneypot?address=' + address); }
+        catch (e) { apiIssues.push('honeypot.is unreachable'); }
+      }
+      checkGoPlus(rep, gp, hp);
+    }
+
+    for (const issue of apiIssues) rep.warn('Data gap', issue + ' — verdict is based on partial data', 5);
+
+    status.textContent = '';
+    renderResult(rep, address);
+    saveHistory(rep, address);
+  } catch (e) {
+    status.textContent = 'Scan failed: ' + e.message;
+  } finally {
+    busy = false; $('scanBtn').disabled = false;
+  }
+}
+
+/* ============================================================
+   Render
+============================================================ */
+function renderResult(rep, address) {
+  const v = rep.verdict(), vc = rep.vclass(), m = rep.meta;
+  const score = Math.max(0, Math.round(rep.score));
+  const segs = rep.hardFails.length ? 0 : Math.round(score / 10);
+
+  const item = (cls, arr, withPts) => arr.map(x => `
+    <div class="f-item"><div class="dot ${cls}"></div>
+      <div><b>${esc(x[0])}</b>${withPts && x[2] ? ` <small style="display:inline;color:var(--faint)">−${x[2]}</small>` : ''}
+      <small>${esc(x[1])}</small></div>
+    </div>`).join('');
+
+  const sortedWarns = [...rep.warnings].sort((a,b) => b[2] - a[2]);
+
+  $('result').innerHTML = `
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="tk-name">${esc(m.name || '?')} <span style="color:var(--muted)">$${esc(m.symbol || '?')}</span></div>
+        <div class="tk-sub">${esc(m.chain || '?')} · ${esc(m.dex || '?')}</div>
+        <div class="tk-addr">${esc(address)}</div>
+      </div>
+      <div class="stamp v-${vc}">${v}${rep.hardFails.length ? '' : `<div style="font-size:10px;letter-spacing:.05em">${score}/100</div>`}</div>
+    </div>
+    <div class="segbar" aria-label="risk score ${score} out of 100">
+      ${Array.from({length:10}, (_,i) => `<div class="seg ${i < segs ? 'on-' + vc : ''}"></div>`).join('')}
+    </div>
+    <div class="score-label">${rep.hardFails.length ? 'hard fail — score not applicable' : 'score ' + score + '/100'}</div>
+    <div class="stats">
+      <div class="stat"><b>${m.price ? '$' + (+m.price < 0.01 ? (+m.price).toExponential(2) : (+m.price).toFixed(4)) : 'n/a'}</b><span>price</span></div>
+      <div class="stat"><b>${usd(m.liq)}</b><span>liquidity</span></div>
+      <div class="stat"><b>${usd(m.mcap)}</b><span>mcap</span></div>
+      <div class="stat"><b>${usd(m.vol)}</b><span>vol 24h</span></div>
+    </div>
+    <div class="findings">
+      ${rep.hardFails.length ? `<div class="f-group"><div class="f-title reject">Hard fails — do not touch</div>${item('reject', rep.hardFails)}</div>` : ''}
+      ${sortedWarns.length ? `<div class="f-group"><div class="f-title caution">Warnings</div>${item('caution', sortedWarns, true)}</div>` : ''}
+      ${rep.passes.length ? `<details class="f-group"><summary><div class="f-title pass">Passed checks (${rep.passes.length})</div></summary>${item('pass', rep.passes)}</details>` : ''}
+    </div>
+    <div class="card-foot">
+      ${m.url ? `<a class="link" href="${esc(m.url)}" target="_blank" rel="noopener">Open chart on Dexscreener →</a>` : ''}
+    </div>
+    <div class="disclaimer">PASS means "no obvious scam vectors detected", not "safe" and never "buy". Insider dumps with clean contracts are only partially detectable. Not financial advice.</div>
+  </div>`;
+  window.scrollTo({ top: 0 });
+}
+
+/* ============================================================
+   History
+============================================================ */
+function saveHistory(rep, address) {
+  const h = store.k.filter(x => x.address !== address);
+  h.unshift({
+    address, symbol: rep.meta.symbol || '?', name: rep.meta.name || '?',
+    verdict: rep.verdict(), vclass: rep.vclass(),
+    score: rep.hardFails.length ? null : Math.max(0, Math.round(rep.score)),
+    ts: Date.now()
+  });
+  store.k = h.slice(0, 50);
+  renderHistory();
+}
+function renderHistory() {
+  const h = store.k;
+  $('history').innerHTML = h.length ? h.map(x => `
+    <button class="h-item" data-addr="${esc(x.address)}">
+      <div class="h-meta">
+        <div class="h-sym">$${esc(x.symbol)} <span style="color:var(--muted);font-weight:400">${esc(x.name)}</span></div>
+        <div class="h-time">${new Date(x.ts).toLocaleString()} · tap to re-scan</div>
+      </div>
+      <div class="chip v-${x.vclass}">${x.verdict}${x.score != null ? ' ' + x.score : ''}</div>
+    </button>`).join('')
+    : '<div class="empty">No scans yet. Paste an address above.</div>';
+  document.querySelectorAll('.h-item').forEach(el =>
+    el.addEventListener('click', () => { $('addr').value = el.dataset.addr; scan(el.dataset.addr); }));
+}
+
+/* ============================================================
+   Wire up
+============================================================ */
+$('scanBtn').addEventListener('click', () => scan($('addr').value));
+$('addr').addEventListener('keydown', e => { if (e.key === 'Enter') scan($('addr').value); });
+$('pasteBtn').addEventListener('click', async () => {
+  try { const t = await navigator.clipboard.readText(); $('addr').value = t.trim(); scan(t); }
+  catch { $('addr').focus(); }
+});
+$('clearBtn').addEventListener('click', () => { store.k = []; renderHistory(); });
+renderHistory();
+</script>
+</body>
+</html>
