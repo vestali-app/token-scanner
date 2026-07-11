@@ -70,34 +70,34 @@
 </style>
 </head>
 <body>
-<div class="banner">PAPER MODE ‚Äî SIMULATED FILLS, NO REAL FUNDS</div>
+<div class="banner">PAPER MODE &mdash; SIMULATED FILLS, NO REAL FUNDS</div>
 <h1>PAPER TRADER</h1>
 <div class="muted" id="subtitle">memecoin strategy expectancy tracker</div>
 
 <h2>Performance</h2>
 <div class="stats">
   <div class="stat"><div class="stat-label">Cumulative PnL</div>
-    <div class="stat-value" id="cum-pnl">‚Äî</div></div>
+    <div class="stat-value" id="cum-pnl">&mdash;</div></div>
   <div class="stat"><div class="stat-label">Win rate</div>
-    <div class="stat-value" id="win-rate">‚Äî</div></div>
+    <div class="stat-value" id="win-rate">&mdash;</div></div>
   <div class="stat"><div class="stat-label">Expectancy / trade</div>
-    <div class="stat-value" id="expectancy">‚Äî</div></div>
+    <div class="stat-value" id="expectancy">&mdash;</div></div>
   <div class="stat"><div class="stat-label">Open positions</div>
-    <div class="stat-value flat" id="open-count">‚Äî</div></div>
+    <div class="stat-value flat" id="open-count">&mdash;</div></div>
 </div>
 
 <h2>Equity curve</h2>
 <canvas id="equity" width="640" height="160"></canvas>
 
 <h2>Open positions</h2>
-<div id="open-list"><div class="empty">loading‚Ä¶</div></div>
+<div id="open-list"><div class="empty">loading&hellip;</div></div>
 
 <h2>Closed trades</h2>
-<div id="closed-list"><div class="empty">loading‚Ä¶</div></div>
+<div id="closed-list"><div class="empty">loading&hellip;</div></div>
 <div class="updated" id="updated"></div>
 
 <script>
-// ---- fill these in (anon key only ‚Äî read-only via RLS; NEVER the service key)
+// ---- fill these in (anon key only -- read-only via RLS; NEVER the service key)
 const SUPABASE_URL = "https://mrthorxjghhshhmjltvs.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ydGhvcnhqZ2hoc2hobWpsdHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NDk5NzQsImV4cCI6MjA5OTMyNTk3NH0.lRduThAxhUnWPw0PQE3PignGOjy0Pg43nk9zMbcZ-W8";
 
@@ -106,10 +106,10 @@ const REASON_COLOR = { take_profit: "green", trailing_stop: "green",
                        max_hold: "amber", hard_stop: "red",
                        emergency: "red", no_route: "red" };
 
-const eur = v => (v >= 0 ? "+" : "") + v.toFixed(2) + " ‚Ç¨";
+const eur = v => (v >= 0 ? "+" : "") + v.toFixed(2) + " \u20AC";
 const pctf = v => (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
 const cls = v => v > 0 ? "pos" : v < 0 ? "neg" : "flat";
-const price = v => v == null ? "‚Äî" : Number(v).toPrecision(4);
+const price = v => v == null ? "\u2014" : Number(v).toPrecision(4);
 const holdTime = (a, b) => {
   const h = (new Date(b) - new Date(a)) / 3.6e6;
   return h < 1 ? `${Math.round(h * 60)}m` : h < 48 ? `${h.toFixed(1)}h` : `${(h / 24).toFixed(1)}d`;
@@ -173,9 +173,9 @@ async function refresh() {
   try {
     positions = await sb("positions?select=*&order=opened_at.desc");
   } catch (e) {
-    document.getElementById("subtitle").textContent = "cannot reach Supabase ‚Äî check URL/key in index.html";
-    document.getElementById("open-list").innerHTML = '<div class="empty">no data ‚Äî Supabase not configured</div>';
-    document.getElementById("closed-list").innerHTML = '<div class="empty">no data ‚Äî Supabase not configured</div>';
+    document.getElementById("subtitle").textContent = "cannot reach Supabase - check URL/key in index.html";
+    document.getElementById("open-list").innerHTML = '<div class="empty">no data - Supabase not configured</div>';
+    document.getElementById("closed-list").innerHTML = '<div class="empty">no data - Supabase not configured</div>';
     return;
   }
   document.getElementById("subtitle").textContent = "memecoin strategy expectancy tracker";
@@ -185,10 +185,10 @@ async function refresh() {
   const cum = closed.reduce((s, p) => s + (+p.realized_pnl_eur || 0), 0);
   const invested = closed.reduce((s, p) => s + (+p.size_eur || 0), 0);
   const wins = closed.filter(p => (+p.realized_pnl_eur || 0) > 0).length;
-  statTile("cum-pnl", closed.length ? `${eur(cum)} (${pctf(invested ? cum / invested * 100 : 0)})` : "‚Äî", cls(cum));
-  statTile("win-rate", closed.length ? `${(wins / closed.length * 100).toFixed(0)}% of ${closed.length}` : "‚Äî",
+  statTile("cum-pnl", closed.length ? `${eur(cum)} (${pctf(invested ? cum / invested * 100 : 0)})` : "\u2014", cls(cum));
+  statTile("win-rate", closed.length ? `${(wins / closed.length * 100).toFixed(0)}% of ${closed.length}` : "\u2014",
            closed.length && wins / closed.length >= 0.5 ? "pos" : "flat");
-  statTile("expectancy", closed.length ? eur(cum / closed.length) : "‚Äî", cls(cum));
+  statTile("expectancy", closed.length ? eur(cum / closed.length) : "\u2014", cls(cum));
   statTile("open-count", String(open.length));
 
   drawEquity(closed);
@@ -202,12 +202,12 @@ async function refresh() {
       const upnl = cur ? (cur - p.entry_price) / p.entry_price * 100 : null;
       return `<div class="card">
         <div class="row"><span class="sym">${p.symbol || "?"}</span>
-          <span class="${upnl == null ? "flat" : cls(upnl)}">${upnl == null ? "‚Äî" : pctf(upnl)}</span></div>
+          <span class="${upnl == null ? "flat" : cls(upnl)}">${upnl == null ? "\u2014" : pctf(upnl)}</span></div>
         <div class="row muted">
           <span>entry ${price(p.entry_price)}</span>
           <span>now ${price(cur)}</span>
           <span>peak ${price(p.peak_price)}</span>
-          <span>${holdTime(p.opened_at, Date.now())}${p.tp_taken ? " ¬∑ TP¬Ω taken" : ""}</span>
+          <span>${holdTime(p.opened_at, Date.now())}${p.tp_taken ? " \u00B7 TP\u00BD taken" : ""}</span>
         </div></div>`;
     }));
     openEl.innerHTML = cards.join("");
@@ -228,13 +228,13 @@ async function refresh() {
           <span class="muted">${holdTime(p.opened_at, p.closed_at)}</span>
         </div>
         <div class="detail">
-          PnL: <span class="${cls(pnl)}">${eur(+p.realized_pnl_eur || 0)}</span> on ${(+p.size_eur).toFixed(0)} ‚Ç¨ ¬∑
-          scan score ${p.scan_score ?? "‚Äî"}<br>
+          PnL: <span class="${cls(pnl)}">${eur(+p.realized_pnl_eur || 0)}</span> on ${(+p.size_eur).toFixed(0)} &euro; &middot;
+          scan score ${p.scan_score ?? "\u2014"}<br>
           entry ${price(p.entry_price)} (quoted ${price(p.entry_quoted_price)},
-          impact ${p.entry_impact_pct ?? "‚Äî"}%) ‚Üí exit ${price(p.exit_price)}<br>
-          opened ${new Date(p.opened_at).toLocaleString()} ¬∑
+          impact ${p.entry_impact_pct ?? "\u2014"}%) &rarr; exit ${price(p.exit_price)}<br>
+          opened ${new Date(p.opened_at).toLocaleString()} &middot;
           closed ${new Date(p.closed_at).toLocaleString()}<br>
-          <a href="https://dexscreener.com/solana/${p.pair_address || p.address}" target="_blank" rel="noopener">chart ‚Üó</a>
+          <a href="https://dexscreener.com/solana/${p.pair_address || p.address}" target="_blank" rel="noopener">chart &#8599;</a>
           <span class="muted"> ${p.address}</span>
         </div></div>`;
     }).join("");
