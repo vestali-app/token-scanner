@@ -1,1 +1,250 @@
-paper/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paper Trader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D1014; --surface: #151A21; --surface2: #1B222B;
+    --green: #56D68B; --amber: #FFB347; --red: #FF5C5C;
+    --text: #E8EDF2; --muted: #7C8894; --border: #232B36;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    padding: 12px 12px 40px; max-width: 640px; margin: 0 auto;
+  }
+  h1, h2, .stat-label, .chip {
+    font-family: 'Chakra Petch', sans-serif;
+  }
+  h1 { font-size: 20px; letter-spacing: 1px; margin: 4px 0 2px; }
+  h2 { font-size: 13px; color: var(--muted); text-transform: uppercase;
+       letter-spacing: 2px; margin: 22px 0 8px; }
+  .banner {
+    background: rgba(255,179,71,.12); border: 1px solid var(--amber);
+    color: var(--amber); border-radius: 8px; padding: 8px 12px;
+    font-family: 'Chakra Petch', sans-serif; font-weight: 600;
+    font-size: 12px; letter-spacing: 1px; text-align: center;
+    position: sticky; top: 8px; z-index: 10; margin-bottom: 14px;
+    backdrop-filter: blur(6px);
+  }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+                letter-spacing: 1.5px; }
+  .stat-value { font-size: 18px; font-weight: 700; margin-top: 3px; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .flat { color: var(--text); }
+  canvas { width: 100%; height: 160px; background: var(--surface);
+           border: 1px solid var(--border); border-radius: 10px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .row { display: flex; justify-content: space-between; align-items: baseline;
+         gap: 8px; flex-wrap: wrap; }
+  .sym { font-family: 'Chakra Petch', sans-serif; font-weight: 700; font-size: 15px; }
+  .muted { color: var(--muted); font-size: 11px; }
+  .chip {
+    display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 1px;
+    padding: 2px 8px; border-radius: 20px; text-transform: uppercase;
+  }
+  .chip.green { background: rgba(86,214,139,.15); color: var(--green); }
+  .chip.amber { background: rgba(255,179,71,.15); color: var(--amber); }
+  .chip.red   { background: rgba(255,92,92,.15);  color: var(--red); }
+  .trade { cursor: pointer; }
+  .detail { display: none; margin-top: 8px; padding-top: 8px;
+            border-top: 1px dashed var(--border); font-size: 12px;
+            line-height: 1.8; }
+  .trade.open .detail { display: block; }
+  .empty { color: var(--muted); text-align: center; padding: 18px;
+           font-size: 12px; }
+  .updated { color: var(--muted); font-size: 10px; text-align: right; margin-top: 6px; }
+  a { color: var(--green); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="banner">PAPER MODE ‚Äî SIMULATED FILLS, NO REAL FUNDS</div>
+<h1>PAPER TRADER</h1>
+<div class="muted" id="subtitle">memecoin strategy expectancy tracker</div>
+
+<h2>Performance</h2>
+<div class="stats">
+  <div class="stat"><div class="stat-label">Cumulative PnL</div>
+    <div class="stat-value" id="cum-pnl">‚Äî</div></div>
+  <div class="stat"><div class="stat-label">Win rate</div>
+    <div class="stat-value" id="win-rate">‚Äî</div></div>
+  <div class="stat"><div class="stat-label">Expectancy / trade</div>
+    <div class="stat-value" id="expectancy">‚Äî</div></div>
+  <div class="stat"><div class="stat-label">Open positions</div>
+    <div class="stat-value flat" id="open-count">‚Äî</div></div>
+</div>
+
+<h2>Equity curve</h2>
+<canvas id="equity" width="640" height="160"></canvas>
+
+<h2>Open positions</h2>
+<div id="open-list"><div class="empty">loading‚Ä¶</div></div>
+
+<h2>Closed trades</h2>
+<div id="closed-list"><div class="empty">loading‚Ä¶</div></div>
+<div class="updated" id="updated"></div>
+
+<script>
+// ---- fill these in (anon key only ‚Äî read-only via RLS; NEVER the service key)
+const SUPABASE_URL = "https://mrthorxjghhshhmjltvs.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1ydGhvcnhqZ2hoc2hobWpsdHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NDk5NzQsImV4cCI6MjA5OTMyNTk3NH0.lRduThAxhUnWPw0PQE3PignGOjy0Pg43nk9zMbcZ-W8";
+
+const HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
+const REASON_COLOR = { take_profit: "green", trailing_stop: "green",
+                       max_hold: "amber", hard_stop: "red",
+                       emergency: "red", no_route: "red" };
+
+const eur = v => (v >= 0 ? "+" : "") + v.toFixed(2) + " ‚Ç¨";
+const pctf = v => (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
+const cls = v => v > 0 ? "pos" : v < 0 ? "neg" : "flat";
+const price = v => v == null ? "‚Äî" : Number(v).toPrecision(4);
+const holdTime = (a, b) => {
+  const h = (new Date(b) - new Date(a)) / 3.6e6;
+  return h < 1 ? `${Math.round(h * 60)}m` : h < 48 ? `${h.toFixed(1)}h` : `${(h / 24).toFixed(1)}d`;
+};
+
+async function sb(path) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS });
+  if (!r.ok) throw new Error(`supabase ${r.status}`);
+  return r.json();
+}
+
+async function livePrice(pairAddress) {
+  try {
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/pairs/solana/${pairAddress}`);
+    const d = await r.json();
+    const p = (d.pairs && d.pairs[0]) || d.pair;
+    return p ? parseFloat(p.priceUsd) : null;
+  } catch { return null; }
+}
+
+function drawEquity(closed) {
+  const c = document.getElementById("equity");
+  const cssW = c.getBoundingClientRect().width || (c.parentElement && c.parentElement.clientWidth) || 600;
+  const ctx = c.getContext("2d");
+  const W = c.width = cssW * devicePixelRatio;
+  const H = c.height = 160 * devicePixelRatio;
+  ctx.clearRect(0, 0, W, H);
+  const pts = [];
+  let cum = 0;
+  closed.slice().sort((a, b) => new Date(a.closed_at) - new Date(b.closed_at))
+        .forEach(p => { cum += +p.realized_pnl_eur || 0; pts.push(cum); });
+  if (pts.length < 1) {
+    ctx.fillStyle = "#7C8894"; ctx.font = `${11 * devicePixelRatio}px JetBrains Mono`;
+    ctx.textAlign = "center"; ctx.fillText("no closed trades yet", W / 2, H / 2);
+    return;
+  }
+  pts.unshift(0);
+  const min = Math.min(...pts, 0), max = Math.max(...pts, 0);
+  const pad = 14 * devicePixelRatio, span = (max - min) || 1;
+  const x = i => pad + i * (W - 2 * pad) / (pts.length - 1);
+  const y = v => H - pad - (v - min) * (H - 2 * pad) / span;
+  // zero line
+  ctx.strokeStyle = "#232B36"; ctx.lineWidth = devicePixelRatio;
+  ctx.beginPath(); ctx.moveTo(pad, y(0)); ctx.lineTo(W - pad, y(0)); ctx.stroke();
+  // curve
+  ctx.strokeStyle = pts[pts.length - 1] >= 0 ? "#56D68B" : "#FF5C5C";
+  ctx.lineWidth = 2 * devicePixelRatio;
+  ctx.beginPath();
+  pts.forEach((v, i) => i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v)));
+  ctx.stroke();
+}
+
+function statTile(id, text, klass) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "stat-value " + (klass || "flat");
+}
+
+async function refresh() {
+  let positions;
+  try {
+    positions = await sb("positions?select=*&order=opened_at.desc");
+  } catch (e) {
+    document.getElementById("subtitle").textContent = "cannot reach Supabase ‚Äî check URL/key in index.html";
+    document.getElementById("open-list").innerHTML = '<div class="empty">no data ‚Äî Supabase not configured</div>';
+    document.getElementById("closed-list").innerHTML = '<div class="empty">no data ‚Äî Supabase not configured</div>';
+    return;
+  }
+  document.getElementById("subtitle").textContent = "memecoin strategy expectancy tracker";
+  const open = positions.filter(p => p.status === "open");
+  const closed = positions.filter(p => p.status === "closed");
+
+  const cum = closed.reduce((s, p) => s + (+p.realized_pnl_eur || 0), 0);
+  const invested = closed.reduce((s, p) => s + (+p.size_eur || 0), 0);
+  const wins = closed.filter(p => (+p.realized_pnl_eur || 0) > 0).length;
+  statTile("cum-pnl", closed.length ? `${eur(cum)} (${pctf(invested ? cum / invested * 100 : 0)})` : "‚Äî", cls(cum));
+  statTile("win-rate", closed.length ? `${(wins / closed.length * 100).toFixed(0)}% of ${closed.length}` : "‚Äî",
+           closed.length && wins / closed.length >= 0.5 ? "pos" : "flat");
+  statTile("expectancy", closed.length ? eur(cum / closed.length) : "‚Äî", cls(cum));
+  statTile("open-count", String(open.length));
+
+  drawEquity(closed);
+
+  // open positions (live price best-effort from Dexscreener)
+  const openEl = document.getElementById("open-list");
+  if (!open.length) openEl.innerHTML = '<div class="empty">no open positions</div>';
+  else {
+    const cards = await Promise.all(open.map(async p => {
+      const cur = p.pair_address ? await livePrice(p.pair_address) : null;
+      const upnl = cur ? (cur - p.entry_price) / p.entry_price * 100 : null;
+      return `<div class="card">
+        <div class="row"><span class="sym">${p.symbol || "?"}</span>
+          <span class="${upnl == null ? "flat" : cls(upnl)}">${upnl == null ? "‚Äî" : pctf(upnl)}</span></div>
+        <div class="row muted">
+          <span>entry ${price(p.entry_price)}</span>
+          <span>now ${price(cur)}</span>
+          <span>peak ${price(p.peak_price)}</span>
+          <span>${holdTime(p.opened_at, Date.now())}${p.tp_taken ? " ¬∑ TP¬Ω taken" : ""}</span>
+        </div></div>`;
+    }));
+    openEl.innerHTML = cards.join("");
+  }
+
+  // closed trades, reverse chron, tap to expand
+  const closedEl = document.getElementById("closed-list");
+  if (!closed.length) closedEl.innerHTML = '<div class="empty">no closed trades yet</div>';
+  else closedEl.innerHTML = closed
+    .sort((a, b) => new Date(b.closed_at) - new Date(a.closed_at))
+    .map(p => {
+      const pnl = +p.realized_pnl_pct || 0;
+      return `<div class="card trade" onclick="this.classList.toggle('open')">
+        <div class="row">
+          <span class="sym">${p.symbol || "?"}</span>
+          <span class="${cls(pnl)}">${pctf(pnl)}</span>
+          <span class="chip ${REASON_COLOR[p.exit_reason] || "amber"}">${p.exit_reason || "?"}</span>
+          <span class="muted">${holdTime(p.opened_at, p.closed_at)}</span>
+        </div>
+        <div class="detail">
+          PnL: <span class="${cls(pnl)}">${eur(+p.realized_pnl_eur || 0)}</span> on ${(+p.size_eur).toFixed(0)} ‚Ç¨ ¬∑
+          scan score ${p.scan_score ?? "‚Äî"}<br>
+          entry ${price(p.entry_price)} (quoted ${price(p.entry_quoted_price)},
+          impact ${p.entry_impact_pct ?? "‚Äî"}%) ‚Üí exit ${price(p.exit_price)}<br>
+          opened ${new Date(p.opened_at).toLocaleString()} ¬∑
+          closed ${new Date(p.closed_at).toLocaleString()}<br>
+          <a href="https://dexscreener.com/solana/${p.pair_address || p.address}" target="_blank" rel="noopener">chart ‚Üó</a>
+          <span class="muted"> ${p.address}</span>
+        </div></div>`;
+    }).join("");
+
+  document.getElementById("updated").textContent =
+    "updated " + new Date().toLocaleTimeString();
+}
+
+refresh();
+setInterval(refresh, 60_000);
+</script>
+</body>
+</html>
